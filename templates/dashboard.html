@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}프로젝트 관리 - Web App{% endblock %}
+
+{% block content %}
+<div class="page-content project-management">
+    <div class="view-tabs">
+        <button type="button" class="view-tab active" data-view="card">Projects</button>
+        <button type="button" class="view-tab" data-view="table">Projects List</button>
+        <button type="button" class="view-tab" data-view="stats">Statistics</button>
+    </div>
+
+    <section class="view-panel active" id="view-card">
+        <div class="project-cards">
+            {% for p in projects %}
+            <article class="project-card project-type-{{ 'dev' if p.type == '개발' else 'maint' }}">
+                <h3 class="project-card-name">{{ p.name }}</h3>
+                <dl class="project-card-meta">
+                    <dt>PM</dt>
+                    <dd>{{ p.pm }}</dd>
+                    <dt>프로젝트 구분</dt>
+                    <dd>{{ p.type }}</dd>
+                    <dt>프로젝트 기간</dt>
+                    <dd>{{ p.start }} ~ {{ p.end }}</dd>
+                </dl>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="view-panel" id="view-table">
+        <div class="table-wrap">
+            <table class="project-table">
+                <thead>
+                    <tr>
+                        <th>순번</th>
+                        <th>프로젝트 이름</th>
+                        <th>PM</th>
+                        <th>프로젝트 구분</th>
+                        <th>프로젝트 시작일</th>
+                        <th>프로젝트 종료일</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in projects %}
+                    <tr class="row-type-{{ 'dev' if p.type == '개발' else 'maint' }}">
+                        <td>{{ p.no }}</td>
+                        <td>{{ p.name }}</td>
+                        <td>{{ p.pm }}</td>
+                        <td>{{ p.type }}</td>
+                        <td>{{ p.start }}</td>
+                        <td>{{ p.end }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="view-panel" id="view-stats">
+        <h2 class="stats-title">날짜 기반 진척률</h2>
+        <div class="stats-list">
+            {% for p in projects %}
+            <div class="stat-item">
+                <div class="stat-header">
+                    <span class="stat-name">{{ p.name }}</span>
+                    <span class="stat-pct">{{ p.progress }}%</span>
+                </div>
+                <div class="stat-bar-wrap">
+                    <div class="stat-bar stat-type-{{ 'dev' if p.type == '개발' else 'maint' }}" style="width: {{ p.progress }}%;"></div>
+                </div>
+                <div class="stat-period">{{ p.start }} ~ {{ p.end }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+<script>
+(function() {
+    var tabs = document.querySelectorAll('.view-tab');
+    var panels = document.querySelectorAll('.view-panel');
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            var view = this.getAttribute('data-view');
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            panels.forEach(function(p) {
+                p.classList.remove('active');
+                if (p.id === 'view-' + view) p.classList.add('active');
+            });
+            this.classList.add('active');
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Web App{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <h2 class="sidebar-title">프로젝트 관리</h2>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('dashboard') }}" class="nav-item {% if menu_name == 'dashboard' %}active{% endif %}">Dashboard</a>
+                <a href="{{ url_for('menu2') }}" class="nav-item {% if menu_name == 'menu2' %}active{% endif %}">Menu 2</a>
+                <a href="{{ url_for('menu3') }}" class="nav-item {% if menu_name == 'menu3' %}active{% endif %}">Menu 3</a>
+                <a href="{{ url_for('menu4') }}" class="nav-item {% if menu_name == 'menu4' %}active{% endif %}">Menu 4</a>
+                <a href="{{ url_for('menu5') }}" class="nav-item {% if menu_name == 'menu5' %}active{% endif %}">Menu 5</a>
+            </nav>
+        </aside>
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>
