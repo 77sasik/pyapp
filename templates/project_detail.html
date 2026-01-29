@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - Web App{% endblock %}
+
+{% block content %}
+<div class="page-content project-detail">
+    <div class="detail-header">
+        <a href="{{ url_for('menu2') }}" class="back-link">← Projects</a>
+        <h1 class="detail-title">{{ project.name }}</h1>
+        <dl class="detail-meta">
+            <dt>PM</dt><dd>{{ project.pm }}</dd>
+            <dt>구분</dt><dd>{{ project.type }}</dd>
+            <dt>기간</dt><dd>{{ project.start }} ~ {{ project.end }}</dd>
+            <dt>금액</dt><dd>{{ "{:,}".format(project.get('amount', 0)) }}만원</dd>
+        </dl>
+    </div>
+    <div class="detail-tabs">
+        <button type="button" class="detail-tab active" data-tab="output">산출물</button>
+        <button type="button" class="detail-tab" data-tab="wbs">WBS</button>
+        <button type="button" class="detail-tab" data-tab="req">요구사항</button>
+    </div>
+    <div class="detail-panels">
+        <section class="detail-panel active" id="panel-output">
+            <p class="placeholder">산출물 목록이 여기에 표시됩니다. (추후 baseline 기준 동적표 구성)</p>
+        </section>
+        <section class="detail-panel" id="panel-wbs">
+            <p class="placeholder">WBS가 여기에 표시됩니다.</p>
+        </section>
+        <section class="detail-panel" id="panel-req">
+            <p class="placeholder">요구사항이 여기에 표시됩니다.</p>
+        </section>
+    </div>
+</div>
+<script>
+(function() {
+    var tabs = document.querySelectorAll('.detail-tab');
+    var panels = document.querySelectorAll('.detail-panel');
+    tabs.forEach(function(t) {
+        t.addEventListener('click', function() {
+            var tab = this.getAttribute('data-tab');
+            tabs.forEach(function(x) { x.classList.remove('active'); });
+            panels.forEach(function(p) {
+                p.classList.remove('active');
+                if (p.id === 'panel-' + tab) p.classList.add('active');
+            });
+            this.classList.add('active');
+        });
+    });
+})();
+</script>
+{% endblock %}

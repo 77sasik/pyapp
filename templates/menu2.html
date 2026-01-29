@@ -1,9 +1,119 @@
 {% extends "base.html" %}
 
-{% block title %}Menu 2 - Web App{% endblock %}
+{% block title %}Projects - Web App{% endblock %}
 
 {% block content %}
-<div class="page-content">
-    <h1>menu2 hello world!</h1>
+<div class="page-content projects-page">
+    <div class="projects-total">
+        <span class="projects-total-label">프로젝트 금액 총액</span>
+        <span class="projects-total-value">{{ "{:,}".format(total_amount) }}<small>만원</small></span>
+    </div>
+    <div class="projects-toolbar">
+        <button type="button" class="btn-add" id="btn-add-project">프로젝트 추가</button>
+    </div>
+    <div class="add-form-wrap" id="add-form-wrap" hidden>
+        <form action="{{ url_for('projects_add') }}" method="post" class="add-form">
+            <h3 class="add-form-title">프로젝트 추가</h3>
+            <div class="add-form-row">
+                <label>프로젝트 이름</label>
+                <input type="text" name="name" required placeholder="예: 통합 플랫폼 고도화">
+            </div>
+            <div class="add-form-row">
+                <label>PM</label>
+                <input type="text" name="pm" placeholder="예: 김철수">
+            </div>
+            <div class="add-form-row">
+                <label>프로젝트 구분</label>
+                <select name="type">
+                    <option value="개발">개발</option>
+                    <option value="유지보수">유지보수</option>
+                </select>
+            </div>
+            <div class="add-form-row">
+                <label>프로젝트 시작일</label>
+                <input type="date" name="start" required>
+            </div>
+            <div class="add-form-row">
+                <label>프로젝트 종료일</label>
+                <input type="date" name="end" required>
+            </div>
+            <div class="add-form-row">
+                <label>프로젝트 금액 (만원)</label>
+                <input type="number" name="amount" min="0" value="0" placeholder="0">
+            </div>
+            <div class="add-form-actions">
+                <button type="submit" class="btn-submit">추가</button>
+                <button type="button" class="btn-cancel" id="btn-cancel-add">취소</button>
+            </div>
+        </form>
+    </div>
+    <div class="table-wrap">
+        <table class="project-table projects-table">
+            <thead>
+                <tr>
+                    <th class="sortable">
+                        <a href="{{ url_for('menu2', sort='no', order=('desc' if sort_key=='no' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'no' else '' }}">
+                            순번 <span class="sort-icon"></span>
+                        </a>
+                    </th>
+                    <th class="sortable">
+                        <a href="{{ url_for('menu2', sort='name', order=('desc' if sort_key=='name' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'name' else '' }}">
+                            프로젝트 이름 <span class="sort-icon"></span>
+                        </a>
+                    </th>
+                    <th class="sortable">
+                        <a href="{{ url_for('menu2', sort='pm', order=('desc' if sort_key=='pm' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'pm' else '' }}">
+                            PM <span class="sort-icon"></span>
+                        </a>
+                    </th>
+                    <th class="sortable">
+                        <a href="{{ url_for('menu2', sort='type', order=('desc' if sort_key=='type' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'type' else '' }}">
+                            프로젝트 구분 <span class="sort-icon"></span>
+                        </a>
+                    </th>
+                    <th class="sortable">
+                        <a href="{{ url_for('menu2', sort='start', order=('desc' if sort_key=='start' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'start' else '' }}">
+                            프로젝트 시작일 <span class="sort-icon"></span>
+                        </a>
+                    </th>
+                    <th class="sortable">
+                        <a href="{{ url_for('menu2', sort='end', order=('desc' if sort_key=='end' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'end' else '' }}">
+                            프로젝트 종료일 <span class="sort-icon"></span>
+                        </a>
+                    </th>
+                    <th class="sortable">
+                        <a href="{{ url_for('menu2', sort='amount', order=('desc' if sort_key=='amount' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'amount' else '' }}">
+                            프로젝트 금액 (만원) <span class="sort-icon"></span>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in projects %}
+                <tr class="row-type-{{ 'dev' if p.type == '개발' else 'maint' }} clickable" data-href="{{ url_for('project_detail', id=p.id) }}">
+                    <td>{{ p.no }}</td>
+                    <td>{{ p.name }}</td>
+                    <td>{{ p.pm }}</td>
+                    <td>{{ p.type }}</td>
+                    <td>{{ p.start }}</td>
+                    <td>{{ p.end }}</td>
+                    <td class="amount">{{ "{:,}".format(p.get('amount', 0)) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
+<script>
+(function() {
+    var wrap = document.getElementById('add-form-wrap');
+    var btnAdd = document.getElementById('btn-add-project');
+    var btnCancel = document.getElementById('btn-cancel-add');
+    if (btnAdd) btnAdd.addEventListener('click', function() { wrap.hidden = false; });
+    if (btnCancel) btnCancel.addEventListener('click', function() { wrap.hidden = true; });
+    document.querySelectorAll('.clickable[data-href]').forEach(function(row) {
+        row.addEventListener('click', function() { window.location.href = this.getAttribute('data-href'); });
+    });
+})();
+</script>
 {% endblock %}
