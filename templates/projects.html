@@ -52,37 +52,37 @@
             <thead>
                 <tr>
                     <th class="sortable">
-                        <a href="{{ url_for('menu2', sort='no', order=('desc' if sort_key=='no' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'no' else '' }}">
+                        <a href="{{ url_for('projects', sort='no', order=('desc' if sort_key=='no' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'no' else '' }}">
                             순번 <span class="sort-icon"></span>
                         </a>
                     </th>
                     <th class="sortable">
-                        <a href="{{ url_for('menu2', sort='name', order=('desc' if sort_key=='name' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'name' else '' }}">
+                        <a href="{{ url_for('projects', sort='name', order=('desc' if sort_key=='name' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'name' else '' }}">
                             프로젝트 이름 <span class="sort-icon"></span>
                         </a>
                     </th>
                     <th class="sortable">
-                        <a href="{{ url_for('menu2', sort='pm', order=('desc' if sort_key=='pm' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'pm' else '' }}">
+                        <a href="{{ url_for('projects', sort='pm', order=('desc' if sort_key=='pm' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'pm' else '' }}">
                             PM <span class="sort-icon"></span>
                         </a>
                     </th>
                     <th class="sortable">
-                        <a href="{{ url_for('menu2', sort='type', order=('desc' if sort_key=='type' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'type' else '' }}">
+                        <a href="{{ url_for('projects', sort='type', order=('desc' if sort_key=='type' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'type' else '' }}">
                             프로젝트 구분 <span class="sort-icon"></span>
                         </a>
                     </th>
                     <th class="sortable">
-                        <a href="{{ url_for('menu2', sort='start', order=('desc' if sort_key=='start' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'start' else '' }}">
+                        <a href="{{ url_for('projects', sort='start', order=('desc' if sort_key=='start' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'start' else '' }}">
                             프로젝트 시작일 <span class="sort-icon"></span>
                         </a>
                     </th>
                     <th class="sortable">
-                        <a href="{{ url_for('menu2', sort='end', order=('desc' if sort_key=='end' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'end' else '' }}">
+                        <a href="{{ url_for('projects', sort='end', order=('desc' if sort_key=='end' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'end' else '' }}">
                             프로젝트 종료일 <span class="sort-icon"></span>
                         </a>
                     </th>
                     <th class="sortable">
-                        <a href="{{ url_for('menu2', sort='amount', order=('desc' if sort_key=='amount' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'amount' else '' }}">
+                        <a href="{{ url_for('projects', sort='amount', order=('desc' if sort_key=='amount' and order=='asc' else 'asc')) }}" class="th-sort {{ 'active ' + order if sort_key == 'amount' else '' }}">
                             프로젝트 금액 (만원) <span class="sort-icon"></span>
                         </a>
                     </th>

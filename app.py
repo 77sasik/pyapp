@@ -66,8 +66,8 @@ def _project_by_id(id):
     except (TypeError, ValueError):
         return None
 
-@app.route('/menu2')
-def menu2():
+@app.route('/projects')
+def projects():
     sort_key = request.args.get('sort', 'no')
     order = request.args.get('order', 'asc')
     if sort_key not in SORT_KEYS:
@@ -93,8 +93,8 @@ def menu2():
         p['no'] = i
     total_amount = sum(p.get('amount', 0) for p in PROJECTS)
     return render_template(
-        'menu2.html',
-        menu_name='menu2',
+        'projects.html',
+        menu_name='projects',
         projects=projects,
         total_amount=total_amount,
         sort_key=sort_key,
@@ -117,14 +117,14 @@ def projects_add():
             'id': _next_id(), 'name': name, 'pm': pm, 'type': ptype,
             'start': start, 'end': end, 'amount': amount,
         })
-    return redirect(url_for('menu2'))
+    return redirect(url_for('projects'))
 
 @app.route('/project/<int:id>')
 def project_detail(id):
     proj = _project_by_id(id)
     if not proj:
-        return redirect(url_for('menu2'))
-    return render_template('project_detail.html', menu_name='menu2', project=proj)
+        return redirect(url_for('projects'))
+    return render_template('project_detail.html', menu_name='projects', project=proj)
 
 @app.route('/menu3')
 def menu3():
