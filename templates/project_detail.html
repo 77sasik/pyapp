@@ -21,7 +21,7 @@
     </div>
     <div class="detail-panels">
         <section class="detail-panel active" id="panel-output">
-            <p class="placeholder">산출물 목록이 여기에 표시됩니다. (추후 baseline 기준 동적표 구성)</p>
+            <div id="deliverables-container"></div>
         </section>
         <section class="detail-panel" id="panel-wbs">
             <p class="placeholder">WBS가 여기에 표시됩니다.</p>
@@ -31,7 +31,188 @@
         </section>
     </div>
 </div>
+
+<style>
+    .deliverables-save-area { margin-top: 18px; display: flex; gap: 12px; }
+    .deliverables-status { color: #475569; margin-left: 12px; }
+    .project-item-actions { margin-top: 12px; }
+    .project-item-actions button { margin-right: 8px; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
+const projectId = {{ project.id }};
+
+function buildList(items, depth = 0) {
+    const ul = document.createElement('ul');
+    ul.className = 'tree-list';
+    items.forEach(it => {
+        const li = document.createElement('li');
+        li.dataset.id = it.id;
+        li.dataset.code = it.code || '';
+        li.dataset.title = it.title || '';
+        li.dataset.depth = String(depth);
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'item-left';
+        leftDiv.innerHTML = `<span class="drag-handle">☰</span><div class="item-meta"><strong>${it.code}</strong> ${it.title}</div>`;
+        
+        const rightDiv = document.createElement('div');
+        rightDiv.className = 'item-actions';
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-delete';
+        btnDelete.textContent = '×';
+        btnDelete.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`삭제하시겠습니까? (${it.code} ${it.title})`)) {
+                li.remove();
+            }
+        });
+        rightDiv.appendChild(btnDelete);
+        
+        row.appendChild(leftDiv);
+        row.appendChild(rightDiv);
+        li.appendChild(row);
+        
+        if (it.children && it.children.length) {
+            li.appendChild(buildList(it.children, depth + 1));
+        } else {
+            const placeholder = document.createElement('ul');
+            placeholder.className = 'tree-list';
+            li.appendChild(placeholder);
+        }
+        ul.appendChild(li);
+    });
+    return ul;
+}
+
+function enableSortables(container) {
+    container.querySelectorAll('ul.tree-list').forEach(ul => {
+        if (ul._sortable) return;
+        ul._sortable = Sortable.create(ul, {
+            group: 'deliverables',
+            animation: 150,
+            handle: '.drag-handle',
+            fallbackOnBody: true,
+            swapThreshold: 0.65,
+            onAdd: () => { fixDepths(container); },
+            onUpdate: () => { fixDepths(container); },
+        });
+    });
+}
+
+function fixDepths(container) {
+    function walk(ul, depth) {
+        ul.querySelectorAll(':scope > li').forEach(li => {
+            li.dataset.depth = String(depth);
+            const childUl = li.querySelector(':scope > ul');
+            if (childUl) walk(childUl, depth + 1);
+        });
+    }
+    const root = container.querySelector('ul.tree-list');
+    if (root) walk(root, 0);
+}
+
+function serializeList(ul) {
+    const out = [];
+    ul.querySelectorAll(':scope > li').forEach(li => {
+        const obj = { id: li.dataset.id, code: li.dataset.code, title: li.dataset.title, children: [] };
+        const childUl = li.querySelector(':scope > ul');
+        if (childUl) obj.children = serializeList(childUl);
+        out.push(obj);
+    });
+    return out;
+}
+
+async function renderProjectDeliverables() {
+    const container = document.getElementById('deliverables-container');
+    container.innerHTML = '';
+    try {
+        const res = await fetch(`/api/project/${projectId}/deliverables`);
+        if (!res.ok) throw new Error('fetch failed');
+        const data = await res.json();
+        const root = buildList(data, 0);
+        container.appendChild(root);
+        enableSortables(container);
+        fixDepths(container);
+        
+        // 저장 버튼 추가
+        const saveArea = document.createElement('div');
+        saveArea.className = 'deliverables-save-area';
+        saveArea.innerHTML = `
+            <button id="btn-add-project-item" class="btn-add">＋ 산출물 추가</button>
+            <button id="btn-save-deliverables" class="btn-add">산출물 저장</button>
+            <span id="save-status" class="deliverables-status"></span>
+        `;
+        container.appendChild(saveArea);
+        
+        document.getElementById('btn-add-project-item').addEventListener('click', () => {
+            const code = prompt('새 산출물 코드 (예: X10) 입력:');
+            if (!code) return;
+            const title = prompt('산출물 제목 입력:');
+            if (!title) return;
+            const rootUl = container.querySelector('ul.tree-list');
+            const id = 'n' + Date.now();
+            const li = document.createElement('li');
+            li.dataset.id = id; li.dataset.code = code; li.dataset.title = title; li.dataset.depth = '0';
+            const row = document.createElement('div'); 
+            row.className = 'item-row';
+            const leftDiv = document.createElement('div');
+            leftDiv.className = 'item-left';
+            leftDiv.innerHTML = `<span class="drag-handle">☰</span><div class="item-meta"><strong>${code}</strong> ${title}</div>`;
+            const rightDiv = document.createElement('div');
+            rightDiv.className = 'item-actions';
+            const btnDelete = document.createElement('button');
+            btnDelete.className = 'btn-delete';
+            btnDelete.textContent = '×';
+            btnDelete.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm(`삭제하시겠습니까? (${code} ${title})`)) {
+                    li.remove();
+                }
+            });
+            rightDiv.appendChild(btnDelete);
+            row.appendChild(leftDiv);
+            row.appendChild(rightDiv);
+            li.appendChild(row);
+            const placeholder = document.createElement('ul'); placeholder.className = 'tree-list';
+            li.appendChild(placeholder);
+            (rootUl || document.createElement('ul')).appendChild(li);
+            enableSortables(container);
+            fixDepths(container);
+        });
+        
+        document.getElementById('btn-save-deliverables').addEventListener('click', async () => {
+            const status = document.getElementById('save-status');
+            status.textContent = '저장중...';
+            try {
+                const rootUl = container.querySelector('ul.tree-list');
+                const payload = serializeList(rootUl || document.createElement('ul'));
+                const res = await fetch(`/api/project/${projectId}/deliverables/update`, {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const j = await res.json();
+                if (res.ok && j.ok) {
+                    status.textContent = '저장되었습니다.';
+                } else {
+                    status.textContent = '저장 실패';
+                }
+            } catch (err) {
+                status.textContent = '오류';
+                console.error(err);
+            }
+            setTimeout(()=>{ document.getElementById('save-status').textContent=''; }, 2500);
+        });
+    } catch (err) {
+        container.innerText = '산출물을 불러오지 못했습니다.';
+        console.error(err);
+    }
+}
+
 (function() {
     var tabs = document.querySelectorAll('.detail-tab');
     var panels = document.querySelectorAll('.detail-panel');
@@ -46,6 +227,10 @@
             this.classList.add('active');
         });
     });
+    
+    // 초기 산출물 로드
+    renderProjectDeliverables();
 })();
 </script>
+
 {% endblock %}

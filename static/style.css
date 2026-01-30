@@ -322,6 +322,22 @@ body {
 .detail-panels { margin-top: 0; }
 .detail-panel { display: none; padding: 24px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; }
 .detail-panel.active { display: block; }
+
+/* Shared tree styles for deliverables */
+.tree-list { list-style: none; padding-left: 18px; }
+.tree-list li { padding: 6px 8px; border-radius:6px; margin:6px 0; border:1px solid #e6eef8; }
+.item-row { display:flex; gap:8px; align-items:center; justify-content: space-between; }
+.item-left { display:flex; gap:8px; align-items:center; flex:1; }
+.drag-handle { cursor:grab; padding:4px 6px; color:#475569; }
+.item-meta { color:#334155; }
+.item-actions { display:flex; gap:6px; }
+.btn-delete { padding:4px 8px; background:#976bff; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px; }
+.btn-delete:hover { background:#8157e4; }
+.tree-list li[data-depth="0"] { background: #eaf2ff; }
+.tree-list li[data-depth="1"] { background: #dfeeff; }
+.tree-list li[data-depth="2"] { background: #d2e8ff; }
+.tree-list li[data-depth="3"] { background: #c6e1ff; }
+.tree-list li[data-depth] { transition: background 0.15s; }
 .detail-panel .placeholder { color: #64748b; margin: 0; }
 
 @media (max-width: 768px) {

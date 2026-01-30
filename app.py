@@ -26,6 +26,9 @@ PROJECTS = _init_projects()
 
 SORT_KEYS = ('no', 'name', 'pm', 'type', 'start', 'end', 'amount')
 
+# Project-level deliverables (각 프로젝트별 산출물 커스터마이징)
+PROJECT_DELIVERABLES = {}
+
 def progress_rate(start_str, end_str):
     try:
         start = datetime.strptime(start_str, '%Y-%m-%d')
@@ -178,6 +181,30 @@ def api_deliverables_update():
         return jsonify({'ok': False, 'error': 'invalid payload'}), 400
     global DELIVERABLES
     DELIVERABLES = data
+    return jsonify({'ok': True})
+
+
+# Project-level deliverables API
+@app.route('/api/project/<int:proj_id>/deliverables')
+def api_project_deliverables(proj_id):
+    """프로젝트별 산출물 조회. 저장된 내용 또는 베이스라인 반환"""
+    if proj_id not in PROJECT_DELIVERABLES:
+        # 첫 조회 시 베이스라인 복사
+        import copy
+        PROJECT_DELIVERABLES[proj_id] = copy.deepcopy(DELIVERABLES)
+    return jsonify(PROJECT_DELIVERABLES[proj_id])
+
+
+@app.route('/api/project/<int:proj_id>/deliverables/update', methods=['POST'])
+def api_project_deliverables_update(proj_id):
+    """프로젝트별 산출물 업데이트"""
+    try:
+        data = request.get_json()
+    except Exception:
+        data = None
+    if not isinstance(data, list):
+        return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+    PROJECT_DELIVERABLES[proj_id] = data
     return jsonify({'ok': True})
 
 @app.route('/menu4')

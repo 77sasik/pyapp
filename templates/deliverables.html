@@ -22,9 +22,13 @@
 <style>
     .tree-list { list-style: none; padding-left: 18px; }
     .tree-list li { padding: 6px 8px; border-radius:6px; margin:6px 0; border:1px solid #e6eef8; }
-    .item-row { display:flex; gap:8px; align-items:center; }
+    .item-row { display:flex; gap:8px; align-items:center; justify-content: space-between; }
+    .item-left { display:flex; gap:8px; align-items:center; flex:1; }
     .drag-handle { cursor:grab; padding:4px 6px; color:#475569; }
     .item-meta { color:#334155; }
+    .item-actions { display:flex; gap:6px; }
+    .btn-delete { padding:4px 8px; background:#ff6b6b; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px; }
+    .btn-delete:hover { background:#ff5252; }
 
     /* depth-based backgrounds (상위뎁스가 더 진함) */
     .tree-list li[data-depth="0"] { background: #eaf2ff; }
@@ -53,8 +57,28 @@ function buildList(items, depth = 0) {
         li.dataset.depth = String(depth);
         const row = document.createElement('div');
         row.className = 'item-row';
-        row.innerHTML = `<span class="drag-handle">☰</span><div class="item-meta"><strong>${it.code}</strong> ${it.title}</div>`;
+        
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'item-left';
+        leftDiv.innerHTML = `<span class="drag-handle">☰</span><div class="item-meta"><strong>${it.code}</strong> ${it.title}</div>`;
+        
+        const rightDiv = document.createElement('div');
+        rightDiv.className = 'item-actions';
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-delete';
+        btnDelete.textContent = '×';
+        btnDelete.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`삭제하시겠습니까? (${it.code} ${it.title})`)) {
+                li.remove();
+            }
+        });
+        rightDiv.appendChild(btnDelete);
+        
+        row.appendChild(leftDiv);
+        row.appendChild(rightDiv);
         li.appendChild(row);
+        
         if (it.children && it.children.length) {
             li.appendChild(buildList(it.children, depth + 1));
         } else {
