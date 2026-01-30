@@ -124,6 +124,10 @@ body {
     transition: box-shadow 0.2s;
 }
 .project-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.project-card { transition: box-shadow 0.2s, transform 0.12s; }
+.project-card-link { display: block; text-decoration: none; color: inherit; }
+.project-card-link .project-card { cursor: pointer; }
+.project-card-link:hover .project-card { transform: translateY(-6px); }
 .project-type-dev { border-left-color: #2563eb; background: linear-gradient(135deg, #eff6ff 0%, #fff 100%); }
 .project-type-maint { border-left-color: #ea580c; background: linear-gradient(135deg, #fff7ed 0%, #fff 100%); }
 

@@ -13,6 +13,7 @@
     <section class="view-panel active" id="view-card">
         <div class="project-cards">
             {% for p in projects %}
+            <a href="{{ url_for('project_detail', id=p.id) }}" class="project-card-link" aria-label="프로젝트 {{ p.name }}">
             <article class="project-card project-type-{{ 'dev' if p.type == '개발' else 'maint' }}">
                 <h3 class="project-card-name">{{ p.name }}</h3>
                 <dl class="project-card-meta">
@@ -24,6 +25,7 @@
                     <dd>{{ p.start }} ~ {{ p.end }}</dd>
                 </dl>
             </article>
+            </a>
             {% endfor %}
         </div>
     </section>
