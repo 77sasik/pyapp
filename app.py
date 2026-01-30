@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request
+from flask import Flask, render_template, redirect, url_for, request, jsonify
 from datetime import datetime
 
 app = Flask(__name__)
@@ -126,9 +126,59 @@ def project_detail(id):
         return redirect(url_for('projects'))
     return render_template('project_detail.html', menu_name='projects', project=proj)
 
-@app.route('/menu3')
-def menu3():
-    return render_template('menu3.html', menu_name='menu3')
+@app.route('/deliverables')
+def deliverables():
+    return render_template('deliverables.html', menu_name='deliverables')
+
+
+# --- Deliverables baseline (산출물 관리) sample data ---
+DELIVERABLES = [
+    {
+        'id': 'A00', 'code': 'A00', 'title': '프로젝트 착수', 'children': [
+            {'id': 'A10', 'code': 'A10', 'title': '요건 수집', 'children': [
+                {'id': 'A11', 'code': 'A11', 'title': '요구사항 문서', 'children': []},
+                {'id': 'A12', 'code': 'A12', 'title': '이해관계자 목록', 'children': []},
+            ]},
+            {'id': 'A20', 'code': 'A20', 'title': '초기 검토', 'children': []},
+        ]
+    },
+    {
+        'id': 'B00', 'code': 'B00', 'title': '계획 수립', 'children': [
+            {'id': 'B10', 'code': 'B10', 'title': '프로젝트 계획서', 'children': []},
+            {'id': 'B20', 'code': 'B20', 'title': '리스크 등록부', 'children': []},
+        ]
+    },
+    {
+        'id': 'C00', 'code': 'C00', 'title': '실행 및 통제', 'children': [
+            {'id': 'C10', 'code': 'C10', 'title': '개발 산출물', 'children': [
+                {'id': 'C11', 'code': 'C11', 'title': '설계서', 'children': []},
+                {'id': 'C12', 'code': 'C12', 'title': '소스코드', 'children': []},
+            ]},
+        ]
+    },
+    {'id': 'D00', 'code': 'D00', 'title': '종료', 'children': []},
+    {'id': 'E00', 'code': 'E00', 'title': '개발 산출물', 'children': [
+        {'id': 'E10', 'code': 'E10', 'title': '배포 패키지', 'children': []},
+    ]},
+]
+
+
+@app.route('/api/deliverables')
+def api_deliverables():
+    return jsonify(DELIVERABLES)
+
+
+@app.route('/api/deliverables/update', methods=['POST'])
+def api_deliverables_update():
+    try:
+        data = request.get_json()
+    except Exception:
+        data = None
+    if not isinstance(data, list):
+        return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+    global DELIVERABLES
+    DELIVERABLES = data
+    return jsonify({'ok': True})
 
 @app.route('/menu4')
 def menu4():

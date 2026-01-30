@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}산출물 관리 - Baseline{% endblock %}
+{% block title %}산출물 관리 - Deliverables{% endblock %}
 
 {% block content %}
 <div class="page-content">
@@ -10,6 +10,7 @@
     <div style="margin:18px 0 8px 0; display:flex; gap:12px; align-items:center;">
         <button id="btn-refresh" class="btn-add">새로고침</button>
         <button id="btn-save" class="btn-add">베이스라인 저장</button>
+        <button id="btn-add-item" class="btn-add">＋ 산출물 추가</button>
         <span id="save-status" style="margin-left:12px;color:#475569;"></span>
     </div>
 
@@ -20,21 +21,28 @@
 
 <style>
     .tree-list { list-style: none; padding-left: 18px; }
-    .tree-list li { padding: 6px 8px; border-radius:6px; margin:6px 0; background:#fbfdff; border:1px solid #e6eef8; }
+    .tree-list li { padding: 6px 8px; border-radius:6px; margin:6px 0; border:1px solid #e6eef8; }
     .item-row { display:flex; gap:8px; align-items:center; }
     .drag-handle { cursor:grab; padding:4px 6px; color:#475569; }
     .item-meta { color:#334155; }
+
+    /* depth-based backgrounds (상위뎁스가 더 진함) */
+    .tree-list li[data-depth="0"] { background: #eaf2ff; }
+    .tree-list li[data-depth="1"] { background: #dfeeff; }
+    .tree-list li[data-depth="2"] { background: #d2e8ff; }
+    .tree-list li[data-depth="3"] { background: #c6e1ff; }
+    .tree-list li[data-depth] { transition: background 0.15s; }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
 async function fetchBaseline() {
-    const res = await fetch('/api/menu3');
+    const res = await fetch('/api/deliverables');
     if (!res.ok) throw new Error('fetch failed');
     return res.json();
 }
 
-function buildList(items) {
+function buildList(items, depth = 0) {
     const ul = document.createElement('ul');
     ul.className = 'tree-list';
     items.forEach(it => {
@@ -42,12 +50,18 @@ function buildList(items) {
         li.dataset.id = it.id;
         li.dataset.code = it.code || '';
         li.dataset.title = it.title || '';
+        li.dataset.depth = String(depth);
         const row = document.createElement('div');
         row.className = 'item-row';
         row.innerHTML = `<span class="drag-handle">☰</span><div class="item-meta"><strong>${it.code}</strong> ${it.title}</div>`;
         li.appendChild(row);
         if (it.children && it.children.length) {
-            li.appendChild(buildList(it.children));
+            li.appendChild(buildList(it.children, depth + 1));
+        } else {
+            // ensure a placeholder ul for possible children
+            const placeholder = document.createElement('ul');
+            placeholder.className = 'tree-list';
+            li.appendChild(placeholder);
         }
         ul.appendChild(li);
     });
@@ -57,15 +71,32 @@ function buildList(items) {
 function enableSortables(container) {
     // initialize Sortable on all lists under container
     container.querySelectorAll('ul.tree-list').forEach(ul => {
-        Sortable.create(ul, {
+        if (ul._sortable) return; // avoid double-init
+        ul._sortable = Sortable.create(ul, {
             group: 'deliverables',
             animation: 150,
             handle: '.drag-handle',
             fallbackOnBody: true,
             swapThreshold: 0.65,
-            onAdd: () => {},
+            onAdd: function () {
+                // when node moved into a new parent, fix depth attributes
+                fixDepths(container);
+            },
+            onUpdate: function () { fixDepths(container); },
         });
     });
+}
+
+function fixDepths(container) {
+    function walk(ul, depth) {
+        ul.querySelectorAll(':scope > li').forEach(li => {
+            li.dataset.depth = String(depth);
+            const childUl = li.querySelector(':scope > ul');
+            if (childUl) walk(childUl, depth + 1);
+        });
+    }
+    const root = container.querySelector('ul.tree-list');
+    if (root) walk(root, 0);
 }
 
 function serializeList(ul) {
@@ -84,9 +115,10 @@ async function renderBaseline() {
     container.innerHTML = '';
     try {
         const data = await fetchBaseline();
-        const root = buildList(data);
+        const root = buildList(data, 0);
         container.appendChild(root);
         enableSortables(container);
+        fixDepths(container);
     } catch (err) {
         container.innerText = '데이터를 불러오지 못했습니다.';
         console.error(err);
@@ -101,7 +133,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
     try {
         const rootUl = document.querySelector('#tree-container > ul.tree-list');
         const payload = serializeList(rootUl || document.createElement('ul'));
-        const res = await fetch('/api/menu3/update', {
+        const res = await fetch('/api/deliverables/update', {
             method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
         });
         const j = await res.json();
@@ -117,7 +149,28 @@ document.getElementById('btn-save').addEventListener('click', async () => {
     setTimeout(()=>{ document.getElementById('save-status').textContent=''; }, 2500);
 });
 
-// 초기 렌더
+// add new deliverable at root (simple flow)
+document.getElementById('btn-add-item').addEventListener('click', async () => {
+    const code = prompt('새 산출물 코드 (예: X10) 입력:');
+    if (!code) return;
+    const title = prompt('산출물 제목 입력:');
+    if (!title) return;
+    const container = document.getElementById('tree-container');
+    const rootUl = container.querySelector('ul.tree-list');
+    const id = 'n' + Date.now();
+    const li = document.createElement('li');
+    li.dataset.id = id; li.dataset.code = code; li.dataset.title = title; li.dataset.depth = '0';
+    const row = document.createElement('div'); row.className = 'item-row';
+    row.innerHTML = `<span class="drag-handle">☰</span><div class="item-meta"><strong>${code}</strong> ${title}</div>`;
+    li.appendChild(row);
+    const placeholder = document.createElement('ul'); placeholder.className = 'tree-list';
+    li.appendChild(placeholder);
+    (rootUl || document.createElement('ul')).appendChild(li);
+    enableSortables(container);
+    fixDepths(container);
+});
+
+// initial render
 renderBaseline();
 </script>
 
