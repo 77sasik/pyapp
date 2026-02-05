@@ -24,7 +24,18 @@
             <div id="deliverables-container"></div>
         </section>
         <section class="detail-panel" id="panel-wbs">
-            <p class="placeholder">WBS가 여기에 표시됩니다.</p>
+            <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+                <button id="btn-manage-columns" class="btn-add">열 관리</button>
+                <div id="columns-panel" style="display:none; border:1px solid #e6eef8; padding:8px; border-radius:6px; background:#fbfdff;">
+                    <strong>열 관리</strong>
+                    <div id="columns-list" style="margin-top:8px; display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto;"></div>
+                    <div style="margin-top:8px; display:flex; gap:8px; justify-content:flex-end;">
+                        <button id="columns-refresh" class="btn-small">새로고침</button>
+                        <button id="columns-save" class="btn-small">저장 (서버)</button>
+                    </div>
+                </div>
+            </div>
+            <div id="project-wbs-container-placeholder"><p class="placeholder">WBS가 여기에 표시됩니다.</p></div>
         </section>
         <section class="detail-panel" id="panel-req">
             <p class="placeholder">요구사항이 여기에 표시됩니다.</p>
@@ -37,6 +48,16 @@
     .deliverables-status { color: #475569; margin-left: 12px; }
     .project-item-actions { margin-top: 12px; }
     .project-item-actions button { margin-right: 8px; }
+
+    /* WBS column and date styles */
+    .date-box { border:1px solid #e6eef8; padding:6px 8px; border-radius:6px; background:#f8fbff; display:flex; gap:6px; align-items:center; font-size:13px; }
+    .date-box .label { font-size:11px; color:#475569; margin-right:6px; }
+    .date-box .sep { color:#94a3b8; }
+    .hidden { display: none !important; }
+    .computed { font-weight:600; }
+    .item-row { display:flex; gap:8px; align-items:center; justify-content: space-between; flex-wrap:nowrap; }
+    .item-left { display:flex; gap:8px; align-items:center; flex:1; min-width:0; }
+    .item-actions { display:flex; align-items:center; gap:6px; white-space:nowrap; }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
@@ -225,11 +246,263 @@ async function renderProjectDeliverables() {
                 if (p.id === 'panel-' + tab) p.classList.add('active');
             });
             this.classList.add('active');
+            // when WBS tab becomes active, render WBS panel lazily
+            if (tab === 'wbs') renderProjectWBS();
         });
     });
     
     // 초기 산출물 로드
     renderProjectDeliverables();
+
+    // --- Project WBS rendering (edit/save similar to deliverables) ---
+    let projectWBSRendered = false;
+
+    function buildWBSList(items, depth = 0) {
+        const ul = document.createElement('ul');
+        ul.className = 'tree-list';
+        items.forEach(it => {
+            const li = document.createElement('li');
+            li.dataset.id = it.id || ('n' + Date.now().toString(36));
+            li.dataset.depth = String(depth);
+            const row = document.createElement('div');
+            row.className = 'item-row';
+
+            const leftDiv = document.createElement('div');
+            leftDiv.className = 'item-left';
+            const drag = document.createElement('span'); drag.className = 'drag-handle'; drag.textContent = '☰';
+            const nameInput = document.createElement('input'); nameInput.type = 'text'; nameInput.value = it.name || it.title || '새 항목'; nameInput.style.width = '180px';
+            nameInput.className = 'wbs-name-input';
+
+            // weight (hidden by default, controlled by column settings)
+            const weightInput = document.createElement('input'); weightInput.type = 'number'; weightInput.value = it.weight || 0; weightInput.className = 'weight-input hidden'; weightInput.min = 0; weightInput.title = '가중치'; weightInput.style.width='64px';
+
+            // planned dates
+            const plannedStart = document.createElement('input'); plannedStart.type = 'date'; plannedStart.className = 'planned-start'; plannedStart.value = it.planned_start || '';
+            const plannedEnd = document.createElement('input'); plannedEnd.type = 'date'; plannedEnd.className = 'planned-end'; plannedEnd.value = it.planned_end || '';
+            const plannedPct = document.createElement('input'); plannedPct.type = 'number'; plannedPct.className = 'planned-pct hidden'; plannedPct.value = it.planned_pct || 0; plannedPct.min=0; plannedPct.max=100; plannedPct.style.width='64px';
+            const plannedBox = document.createElement('div'); plannedBox.className='date-box planned-box'; const pLabel = document.createElement('div'); pLabel.className='label'; pLabel.textContent='계획'; plannedBox.appendChild(pLabel); plannedBox.appendChild(plannedStart); const sep = document.createElement('div'); sep.className='sep'; sep.textContent='~'; plannedBox.appendChild(sep); plannedBox.appendChild(plannedEnd);
+
+            // actual inputs
+            const actualStart = document.createElement('input'); actualStart.type='date'; actualStart.className='actual-start hidden'; actualStart.value = it.actual_start || '';
+            const actualEnd = document.createElement('input'); actualEnd.type='date'; actualEnd.className='actual-end hidden'; actualEnd.value = it.actual_end || '';
+            const actualPctInput = document.createElement('input'); actualPctInput.type='number'; actualPctInput.className='actual-pct hidden'; actualPctInput.min=0; actualPctInput.max=100; actualPctInput.value = it.actual_pct || 0; actualPctInput.style.width='64px';
+            const actualBox = document.createElement('div'); actualBox.className='date-box actual-box'; const aLabel = document.createElement('div'); aLabel.className='label'; aLabel.textContent='실적(%)'; actualBox.appendChild(aLabel);
+            if (it.isTerminal) { actualPctInput.classList.remove('hidden'); actualBox.appendChild(actualPctInput); } else { const actualDisplay = document.createElement('div'); actualDisplay.className='actual-display'; actualDisplay.textContent = String(it.actual_pct || 0); actualBox.appendChild(actualDisplay); }
+
+            // computed display and tooltip
+            const computedDiv = document.createElement('div'); computedDiv.className='computed'; const compSpan = document.createElement('span'); compSpan.className='computed-val'; compSpan.textContent='0'; computedDiv.appendChild(document.createTextNode('완료율: ')); computedDiv.appendChild(compSpan); const tooltip = document.createElement('div'); tooltip.className='tooltip hidden'; tooltip.textContent = `실적 완료율: ${it.actual_pct || 0}%\n계획 완료율: ${it.planned_pct || 0}%`; computedDiv.appendChild(tooltip);
+
+            leftDiv.appendChild(drag); leftDiv.appendChild(nameInput); leftDiv.appendChild(weightInput); leftDiv.appendChild(plannedBox); leftDiv.appendChild(plannedPct); leftDiv.appendChild(actualStart); leftDiv.appendChild(actualEnd); leftDiv.appendChild(actualBox);
+
+            const rightDiv = document.createElement('div'); rightDiv.className = 'item-actions';
+            rightDiv.appendChild(computedDiv);
+            const btnDelete = document.createElement('button'); btnDelete.className = 'btn-delete'; btnDelete.textContent = '×';
+            btnDelete.addEventListener('click', (e) => { e.stopPropagation(); if (confirm('삭제하시겠습니까?')) li.remove(); });
+            rightDiv.appendChild(btnDelete);
+
+            row.appendChild(leftDiv); row.appendChild(rightDiv); li.appendChild(row);
+
+            // store refs
+            li._fields = { nameInput, weightInput, plannedStart, plannedEnd, plannedPct, actualStart, actualEnd, actualPctInput, computedDiv };
+
+            // wire change events to recompute
+            [nameInput, weightInput, plannedStart, plannedEnd, plannedPct, actualPctInput].forEach(el=>{ if (el && el.addEventListener) el.addEventListener('change', ()=>{ computeAll(container); }); });
+
+            if (it.children && it.children.length) {
+                li.appendChild(buildWBSList(it.children, depth + 1));
+            } else {
+                const placeholder = document.createElement('ul'); placeholder.className = 'tree-list'; li.appendChild(placeholder);
+            }
+            ul.appendChild(li);
+        });
+        return ul;
+    }
+
+    function enableWBSortables(container) {
+        container.querySelectorAll('ul.tree-list').forEach(ul => {
+            if (ul._sortable) return;
+            ul._sortable = Sortable.create(ul, {
+                group: 'wbs-project',
+                animation: 150,
+                handle: '.drag-handle',
+                fallbackOnBody: true,
+                swapThreshold: 0.65,
+                onAdd: () => { fixWBSDepths(container); },
+                onUpdate: () => { fixWBSDepths(container); },
+            });
+        });
+    }
+
+    function fixWBSDepths(container) {
+        function walk(ul, depth) {
+            ul.querySelectorAll(':scope > li').forEach(li => {
+                li.dataset.depth = String(depth);
+                const childUl = li.querySelector(':scope > ul');
+                if (childUl) walk(childUl, depth + 1);
+            });
+        }
+        const root = container.querySelector('ul.tree-list');
+        if (root) walk(root, 0);
+    }
+
+    function serializeWBSList(ul) {
+        const out = [];
+        ul.querySelectorAll(':scope > li').forEach(li => {
+            const nameEl = li.querySelector('.wbs-name-input');
+            const obj = { id: li.dataset.id, name: nameEl ? nameEl.value : '', isTerminal: true, weight: 0, planned_start: '', planned_end: '', planned_pct: 0, actual_start: '', actual_end: '', actual_pct: 0, children: [] };
+            const childUl = li.querySelector(':scope > ul');
+            if (childUl) obj.children = serializeWBSList(childUl);
+            out.push(obj);
+        });
+        return out;
+    }
+
+    async function renderProjectWBS() {
+        if (projectWBSRendered) return;
+        projectWBSRendered = true;
+        const panel = document.getElementById('panel-wbs');
+        panel.innerHTML = '<div id="project-wbs-container"></div>';
+        const container = document.getElementById('project-wbs-container');
+        try {
+            const res = await fetch(`/api/project/${projectId}/wbs`);
+            if (!res.ok) throw new Error('fetch failed');
+            const data = await res.json();
+            const root = buildWBSList(data, 0);
+            container.appendChild(root);
+            enableWBSortables(container);
+            fixWBSDepths(container);
+
+            // fetch and apply project column visibility
+            try { const cols = await fetchProjectColumns(projectId); if (cols) applyColumnVisibility(cols); } catch (e) { console.error('fetch project columns failed', e); }
+
+            const ctrl = document.createElement('div'); ctrl.className = 'deliverables-save-area';
+            ctrl.innerHTML = `<button id="btn-add-wbs-item" class="btn-add">＋ WBS 항목 추가</button> <button id="btn-save-wbs" class="btn-add">WBS 저장</button> <span id="wbs-save-status" class="deliverables-status"></span>`;
+            container.appendChild(ctrl);
+
+            document.getElementById('btn-add-wbs-item').addEventListener('click', () => {
+                const rootUl = container.querySelector('ul.tree-list');
+                const id = 'n' + Date.now();
+                const li = document.createElement('li'); li.dataset.id = id; li.dataset.depth = '0';
+                const row = document.createElement('div'); row.className = 'item-row';
+                // build new item with fields
+                const leftDiv = document.createElement('div'); leftDiv.className = 'item-left';
+                const drag = document.createElement('span'); drag.className = 'drag-handle'; drag.textContent = '☰';
+                const nameInput = document.createElement('input'); nameInput.type='text'; nameInput.className='wbs-name-input'; nameInput.value='새 항목'; nameInput.style.width='180px';
+                const plannedBox = document.createElement('div'); plannedBox.className='date-box planned-box'; const pLabel = document.createElement('div'); pLabel.className='label'; pLabel.textContent='계획'; plannedBox.appendChild(pLabel);
+                const ps = document.createElement('input'); ps.type='date'; ps.className='planned-start'; const pe = document.createElement('input'); pe.type='date'; pe.className='planned-end'; plannedBox.appendChild(ps); const sep = document.createElement('div'); sep.className='sep'; sep.textContent='~'; plannedBox.appendChild(sep); plannedBox.appendChild(pe);
+                const actualBox = document.createElement('div'); actualBox.className='date-box actual-box'; const aLabel = document.createElement('div'); aLabel.className='label'; aLabel.textContent='실적(%)'; actualBox.appendChild(aLabel); const ap = document.createElement('input'); ap.type='number'; ap.className='actual-pct'; ap.min=0; ap.max=100; ap.value=0; ap.style.width='64px'; actualBox.appendChild(ap);
+                leftDiv.appendChild(drag); leftDiv.appendChild(nameInput); leftDiv.appendChild(plannedBox); leftDiv.appendChild(actualBox);
+                const rightDiv = document.createElement('div'); rightDiv.className='item-actions'; const btnDelete = document.createElement('button'); btnDelete.className='btn-delete'; btnDelete.textContent='×'; btnDelete.addEventListener('click',(e)=>{ e.stopPropagation(); if(confirm('삭제하시겠습니까?')) li.remove(); }); rightDiv.appendChild(btnDelete);
+                row.appendChild(leftDiv); row.appendChild(rightDiv); li.appendChild(row);
+                const placeholder = document.createElement('ul'); placeholder.className = 'tree-list'; li.appendChild(placeholder);
+                (rootUl || document.createElement('ul')).appendChild(li);
+                enableWBSortables(container); fixWBSDepths(container);
+                computeAll(container);
+            });
+
+            document.getElementById('btn-save-wbs').addEventListener('click', async () => {
+                const status = document.getElementById('wbs-save-status'); status.textContent = '저장중...';
+                try {
+                    const rootUl = container.querySelector('ul.tree-list');
+                    const payload = serializeWBSList(rootUl || document.createElement('ul'));
+                    const res = await fetch(`/api/project/${projectId}/wbs/update`, {
+                        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+                    });
+                    const j = await res.json();
+                    if (res.ok && j.ok) status.textContent = '저장되었습니다.'; else status.textContent = '저장 실패';
+                } catch (err) { status.textContent = '오류'; console.error(err); }
+                setTimeout(()=>{ document.getElementById('wbs-save-status').textContent=''; }, 2500);
+            });
+
+            // initial compute
+            computeAll(container);
+
+        } catch (err) {
+            container.innerText = 'WBS를 불러오지 못했습니다.';
+            console.error(err);
+        }
+    }
+
+    // --- helpers: date pct, compute aggregation (similar to wbs.html) ---
+    function computePctFromDates(startStr, endStr) {
+        try {
+            if (!startStr || !endStr) return 0;
+            const start = new Date(startStr + 'T00:00:00');
+            const end = new Date(endStr + 'T23:59:59');
+            const today = new Date();
+            if (today <= start) return 0;
+            if (today >= end) return 100;
+            const total = end.getTime() - start.getTime();
+            const elapsed = today.getTime() - start.getTime();
+            return Math.round(100 * (elapsed / total));
+        } catch (e) { return 0; }
+    }
+
+    function computeAll(container) {
+        const root = container.querySelector('ul.tree-list'); if (!root) return;
+        function computeLi(li) {
+            const childUl = li.querySelector(':scope > ul');
+            const f = li._fields || {};
+            let computedVal = 0;
+            if (childUl) {
+                const children = Array.from(childUl.querySelectorAll(':scope > li'));
+                if (children.length) {
+                    let sumW=0, weighted=0; let minP=null, maxP=null;
+                    children.forEach(c => {
+                        const cf = c._fields || {};
+                        const childActual = Number(cf.actualPctInput ? cf.actualPctInput.value : (c.querySelector('.actual-display') ? c.querySelector('.actual-display').textContent : 0)) || Number(c.dataset.computed) || 0;
+                        const w = Number(cf.weightInput ? cf.weightInput.value : 0) || 0;
+                        sumW += w; weighted += (w * childActual);
+                        const ps = cf.plannedStart ? cf.plannedStart.value : ''; const pe = cf.plannedEnd ? cf.plannedEnd.value : '';
+                        if (ps) { if (!minP || ps < minP) minP = ps; if (!maxP || pe > maxP) maxP = pe; }
+                    });
+                    if (sumW>0) computedVal = Math.round(weighted / sumW);
+                    if (minP && f.plannedStart) f.plannedStart.value = minP; if (maxP && f.plannedEnd) f.plannedEnd.value = maxP;
+                } else { computedVal = Number(f.actualPctInput ? f.actualPctInput.value : 0) || 0; }
+            } else { computedVal = Number(f.actualPctInput ? f.actualPctInput.value : 0) || 0; }
+
+            const plannedPctDate = computePctFromDates(f.plannedStart ? f.plannedStart.value : '', f.plannedEnd ? f.plannedEnd.value : '');
+            if (f.plannedPct) f.plannedPct.value = String(plannedPctDate);
+            const nodeActualPct = Number(computedVal) || Number(f.actualPctInput ? f.actualPctInput.value : 0) || 0;
+            if (f.computedDiv) {
+                const compSpan = f.computedDiv.querySelector('.computed-val'); if (compSpan) compSpan.textContent = String(nodeActualPct);
+                const tooltip = f.computedDiv.querySelector('.tooltip'); if (tooltip) { const plannedVal = Number(f.plannedPct ? f.plannedPct.value : plannedPctDate) || 0; tooltip.textContent = `실적 완료율: ${nodeActualPct}%\n계획 완료율: ${plannedVal}%`; }
+            }
+            if (f.actualDisplay) f.actualDisplay.textContent = String(nodeActualPct);
+            li.dataset.computed = String(nodeActualPct);
+        }
+        function walk(ul) { ul.querySelectorAll(':scope > li').forEach(li => { const childUl = li.querySelector(':scope > ul'); if (childUl) walk(childUl); computeLi(li); }); }
+        walk(root);
+    }
+
+    async function fetchProjectColumns(pid) { if (!pid) return null; const res = await fetch(`/api/project/${pid}/wbs/columns`); if (!res.ok) return null; return res.json(); }
+    async function saveProjectColumns(pid, cols) { if (!pid) return {ok:false}; const res = await fetch(`/api/project/${pid}/wbs/columns/update`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({columns: cols}) }); return res.json(); }
+    function renderColumnsPanel(cols) { const list = document.getElementById('columns-list'); if (!list) return; list.innerHTML=''; const COLUMNS = [
+        { key:'level', label:'레벨', selector:'.level-val' },
+        { key:'weight', label:'가중치', selector:'.weight-input' },
+        { key:'planned_start', label:'계획 시작일', selector:'.planned-start' },
+        { key:'planned_end', label:'계획 종료일', selector:'.planned-end' },
+        { key:'planned_pct', label:'계획 완료율', selector:'.planned-pct' },
+        { key:'actual_start', label:'실적 시작일', selector:'.actual-start' },
+        { key:'actual_end', label:'실적 종료일', selector:'.actual-end' },
+        { key:'actual_pct', label:'실적 완료율', selector:'.actual-box' },
+        { key:'actions', label:'작업', selector:'.item-actions' }
+    ]; COLUMNS.forEach(c => { const div = document.createElement('div'); div.className='manage-item'; const chk = document.createElement('input'); chk.type='checkbox'; chk.dataset.key=c.key; chk.checked = !!cols[c.key]; const label = document.createElement('div'); label.className='name'; label.textContent=c.label; chk.addEventListener('change', (e)=>{ cols[c.key] = !!e.target.checked; applyColumnVisibility(cols); }); div.appendChild(chk); div.appendChild(label); list.appendChild(div); }); }
+    function applyColumnVisibility(cols) { const COLUMNS = [
+        { key:'level', selector:'.level-val' },
+        { key:'weight', selector:'.weight-input' },
+        { key:'planned_start', selector:'.planned-start' },
+        { key:'planned_end', selector:'.planned-end' },
+        { key:'planned_pct', selector:'.planned-pct' },
+        { key:'actual_start', selector:'.actual-start' },
+        { key:'actual_end', selector:'.actual-end' },
+        { key:'actual_pct', selector:'.actual-box' },
+        { key:'actions', selector:'.item-actions' }
+    ]; COLUMNS.forEach(c => { const show = !!cols[c.key]; document.querySelectorAll(c.selector).forEach(el=>{ if (show) el.classList.remove('hidden'); else el.classList.add('hidden'); }); }); }
+
+    const btnCols = document.getElementById('btn-manage-columns'); if (btnCols) btnCols.addEventListener('click', async ()=>{ const panel = document.getElementById('columns-panel'); if (!panel) return; panel.style.display = (panel.style.display==='none' || !panel.style.display) ? 'block' : 'none'; if (panel.style.display === 'block') { const cols = await fetchProjectColumns(projectId); renderColumnsPanel(cols || {}); applyColumnVisibility(cols || {}); } });
+    const btnColsRefresh = document.getElementById('columns-refresh'); if (btnColsRefresh) btnColsRefresh.addEventListener('click', async ()=>{ const cols = await fetchProjectColumns(projectId); renderColumnsPanel(cols || {}); applyColumnVisibility(cols || {}); });
+    const btnColsSave = document.getElementById('columns-save'); if (btnColsSave) btnColsSave.addEventListener('click', async ()=>{ const list = document.querySelectorAll('#columns-list input[type=checkbox]'); const cols = {}; list.forEach(i=>cols[i.dataset.key]=!!i.checked); const r = await saveProjectColumns(projectId, cols); if (r && r.ok) alert('저장되었습니다.'); else alert('저장 실패'); });
 })();
 </script>
 

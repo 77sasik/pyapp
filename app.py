@@ -207,9 +207,130 @@ def api_project_deliverables_update(proj_id):
     PROJECT_DELIVERABLES[proj_id] = data
     return jsonify({'ok': True})
 
-@app.route('/menu4')
-def menu4():
-    return render_template('menu4.html', menu_name='menu4')
+# @app.route('/menu4')
+# def menu4():
+#     return render_template('menu4.html', menu_name='menu4')
+
+# WBS (Work Breakdown Structure) baseline and project-level storage
+WBS = [
+    {
+        'id': 'W1', 'name': '프로젝트 전체', 'isTerminal': False, 'weight': 100, 'planned_start': '2026-01-01', 'planned_end': '2026-12-31', 'planned_pct': 100, 'actual_start': '', 'actual_end': '', 'actual_pct': 30,
+        'children': [
+            {
+                'id': 'W1.1', 'name': '요구관리', 'isTerminal': False, 'weight': 40, 'planned_start': '2026-01-02', 'planned_end': '2026-03-31', 'planned_pct': 100, 'actual_start': '', 'actual_end': '', 'actual_pct': 80,
+                'children': [
+                    {'id': 'W1.1.1', 'name': '요구수집', 'isTerminal': True, 'weight': 20, 'planned_start': '2026-01-02', 'planned_end': '2026-02-15', 'planned_pct': 100, 'actual_start': '', 'actual_end': '', 'actual_pct': 100, 'children': []},
+                    {'id': 'W1.1.2', 'name': '요구검토', 'isTerminal': True, 'weight': 20, 'planned_start': '2026-02-16', 'planned_end': '2026-03-31', 'planned_pct': 100, 'actual_start': '', 'actual_end': '', 'actual_pct': 60, 'children': []},
+                ]
+            },
+            {
+                'id': 'W1.2', 'name': '설계', 'isTerminal': False, 'weight': 60, 'planned_start': '2026-04-01', 'planned_end': '2026-06-30', 'planned_pct': 100, 'actual_start': '', 'actual_end': '', 'actual_pct': 10,
+                'children': [
+                    {'id': 'W1.2.1', 'name': '기능설계', 'isTerminal': True, 'weight': 30, 'planned_start': '2026-04-01', 'planned_end': '2026-05-15', 'planned_pct': 100, 'actual_start': '', 'actual_end': '', 'actual_pct': 5, 'children': []},
+                    {'id': 'W1.2.2', 'name': '화면설계', 'isTerminal': True, 'weight': 30, 'planned_start': '2026-05-16', 'planned_end': '2026-06-30', 'planned_pct': 100, 'actual_start': '', 'actual_end': '', 'actual_pct': 15, 'children': []},
+                ]
+            }
+        ]
+    }
+]
+
+# Project-level WBS storage
+PROJECT_WBS = {}
+
+# Default column visibility for WBS (can be customized per-project)
+DEFAULT_WBS_COLUMNS = {
+    'level': False,
+    'weight': False,
+    'planned_start': True,
+    'planned_end': True,
+    'planned_pct': True,
+    'actual_start': False,
+    'actual_end': False,
+    'actual_pct': True,
+    'actions': True
+}
+
+# Project-level column visibility storage
+PROJECT_WBS_COLUMNS = {}
+
+@app.route('/wbs')
+def wbs():
+    # pass projects so the template can render a project selector
+    return render_template('wbs.html', menu_name='wbs', projects=PROJECTS)
+
+@app.route('/api/project/<int:proj_id>/wbs/columns')
+def api_project_wbs_columns(proj_id):
+    """프로젝트별 WBS 열 표시 설정 조회 (없으면 기본값 복사)"""
+    if proj_id not in PROJECT_WBS_COLUMNS:
+        import copy
+        PROJECT_WBS_COLUMNS[proj_id] = copy.deepcopy(DEFAULT_WBS_COLUMNS)
+    return jsonify(PROJECT_WBS_COLUMNS[proj_id])
+
+@app.route('/api/project/<int:proj_id>/wbs/columns/update', methods=['POST'])
+def api_project_wbs_columns_update(proj_id):
+    """프로젝트별 WBS 열 표시 설정 업데이트"""
+    try:
+        data = request.get_json()
+    except Exception:
+        data = None
+    if not isinstance(data, dict) or 'columns' not in data:
+        return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+    cols = data.get('columns') or {}
+    # sanitize: ensure keys exist in DEFAULT_WBS_COLUMNS and values are bool
+    sanitized = {}
+    for k, v in DEFAULT_WBS_COLUMNS.items():
+        sanitized[k] = bool(cols.get(k, v))
+    PROJECT_WBS_COLUMNS[proj_id] = sanitized
+    return jsonify({'ok': True})
+
+@app.route('/api/wbs')
+def api_wbs():
+    # debug log for troubleshooting fetch failures
+    try:
+        print('[DEBUG] /api/wbs called, returning WBS length=', len(WBS))
+    except Exception as e:
+        print('[DEBUG] /api/wbs error while logging:', e)
+    return jsonify(WBS)
+
+@app.route('/api/wbs/update', methods=['POST'])
+def api_wbs_update():
+    try:
+        data = request.get_json()
+    except Exception:
+        data = None
+    if not isinstance(data, list):
+        return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+    global WBS
+    WBS = data
+    return jsonify({'ok': True})
+
+@app.route('/api/project/<int:proj_id>/wbs')
+def api_project_wbs(proj_id):
+    if proj_id not in PROJECT_WBS:
+        import copy
+        PROJECT_WBS[proj_id] = copy.deepcopy(WBS)
+    return jsonify(PROJECT_WBS[proj_id])
+
+@app.route('/api/project/<int:proj_id>/wbs/update', methods=['POST'])
+def api_project_wbs_update(proj_id):
+    try:
+        data = request.get_json()
+    except Exception:
+        data = None
+    if not isinstance(data, list):
+        return jsonify({'ok': False, 'error': 'invalid payload'}), 400
+    PROJECT_WBS[proj_id] = data
+    return jsonify({'ok': True})
+
+@app.route('/project/<int:proj_id>/wbs')
+def project_wbs(proj_id):
+    """프로젝트별 WBS 관리 화면 - 베이스라인이 아닌 프로젝트 전용 저장/조회 사용"""
+    proj = _project_by_id(proj_id)
+    if not proj:
+        return redirect(url_for('projects'))
+    # pass project so template can hide selector and initialize project context
+    return render_template('wbs.html', menu_name='wbs', projects=PROJECTS, project=proj)
+
 
 @app.route('/menu5')
 def menu5():

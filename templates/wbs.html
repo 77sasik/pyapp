@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+
+{% block title %}WBS 관리 - WBS (Work Breakdown Structure){% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <h1>WBS 관리 (Level 1 ~ 7)</h1>
+    <p>레벨(1~7) 기반의 WBS를 계층적으로 관리합니다. 드래그앤드롭으로 항목을 이동하면 레벨과 부모가 자동 반영되며, 완료율 집계는 가중치 기반으로 상위 레벨에 반영됩니다.</p>
+
+    <div style="margin:18px 0 8px 0; display:flex; gap:12px; align-items:center;">
+        <button id="btn-refresh" class="btn-add">새로고침</button>
+        <button id="btn-manage-columns" class="btn-add">열 관리</button>
+        <button id="btn-save" class="btn-add">베이스라인 저장</button>
+        <button id="btn-add-item" class="btn-add">＋ WBS 항목 추가 (root)</button>
+        <span id="save-status" style="margin-left:12px;color:#475569;"></span>
+    </div>
+
+    <div id="columns-panel" style="margin:8px 0 12px 0; display:none; border:1px solid #e6eef8; padding:8px; border-radius:6px; background:#fbfdff;">
+        <strong>열 관리</strong> - 표시할 컬럼을 선택하세요.<br>
+        <div id="columns-list" style="margin-top:8px; display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto;"></div>
+        <div style="margin-top:8px; display:flex; gap:8px; justify-content:flex-end;">
+            <button id="columns-refresh" class="btn-small">새로고침</button>
+            <button id="columns-save" class="btn-small">저장 (서버)</button>
+        </div>
+    </div>
+
+    <div id="tree-container" style="margin-top:12px;">
+        <!-- WBS tree will be rendered here -->
+    </div>
+</div>
+
+<style>
+    .tree-list { list-style: none; padding-left: 12px; }
+    .tree-list li { padding: 6px; border-radius:6px; margin:6px 0; border:1px solid #e6eef8; }
+    .item-row { display:flex; gap:8px; align-items:center; justify-content: space-between; flex-wrap:nowrap; }
+    .item-left { display:flex; gap:8px; align-items:center; flex:1; min-width:0; }
+    .drag-handle { cursor:grab; padding:3px 6px; color:#475569; }
+    .item-meta { color:#334155; display:flex; gap:8px; align-items:center; flex:1; min-width:0; }
+    .item-actions { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+    .btn-delete { padding:6px 8px; background:#ff6b6b; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px; width:32px; }
+    .btn-small { padding:6px 8px; background:#3b82f6; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px; width:32px; }
+    input[type="number"] { width:64px; }
+    input[type="date"] { width:110px; }
+    .meta-field { font-size:13px; }
+    .computed { font-weight:600; }
+    .status { padding:4px 8px; border-radius:6px; background:#eef2ff; color:#3730a3; }
+
+    /* date box styles */
+    .date-box { border:1px solid #e6eef8; padding:6px 8px; border-radius:6px; background:#f8fbff; display:flex; gap:6px; align-items:center; font-size:13px; }
+    .date-box .label { font-size:11px; color:#475569; margin-right:6px; }
+    .date-box .sep { color:#94a3b8; }
+
+    /* inline computed next to buttons */
+    .item-actions .computed-inline { display:flex; align-items:center; gap:6px; margin-right:6px; font-weight:600; position:relative; cursor:default; }
+    .item-actions .computed-inline .tooltip { display:none; position:absolute; top:calc(100% + 6px); left:0; background:#0f172a; color:#fff; padding:6px 8px; border-radius:6px; white-space:pre-line; font-size:12px; z-index:30; box-shadow:0 4px 10px rgba(2,6,23,0.2); }
+    .item-actions .computed-inline:hover .tooltip { display:block; }
+
+    /* enforce hide for specific fields (only via `.hidden` class) */
+    .hidden, .label.hidden { display: none !important; }
+
+    /* manager-based hide (per-item) */
+    .manager-hidden { display:none !important; }
+
+    /* manage panel styles */
+    #manage-panel { font-size:13px; color:#0f172a; }
+    .manage-item { display:flex; gap:8px; align-items:center; }
+    .manage-item .depth { color:#64748b; font-size:12px; min-width:40px; }
+    .manage-item .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .manage-item input[type="checkbox"] { transform:scale(1.05); }
+
+
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+async function fetchWBS(projId) {
+    const url = projId ? ('/api/project/' + projId + '/wbs') : '/api/wbs';
+    const res = await fetch(url);
+    if (!res.ok) {
+        const text = await res.text().catch(()=>'<no body>');
+        throw new Error('fetch ' + url + ' failed: ' + res.status + ' ' + res.statusText + ' - ' + text);
+    }
+    return res.json();
+}
+
+function createInput(className, value, type='text'){
+    const el = document.createElement(type === 'textarea' ? 'textarea' : 'input');
+    if (type !== 'textarea') el.type = type;
+    el.className = className;
+    if (value !== undefined && value !== null) el.value = value;
+    return el;
+}
+
+function buildList(items, depth = 0) {
+    const ul = document.createElement('ul');
+    ul.className = 'tree-list';
+    items.forEach(it => {
+        const li = document.createElement('li');
+        li.dataset.id = it.id || ('n' + Date.now() + Math.random().toString(36).slice(2,6));
+        li.dataset.depth = String(depth);
+
+        const row = document.createElement('div');
+        row.className = 'item-row';
+
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'item-left';
+
+        const drag = document.createElement('span'); drag.className = 'drag-handle'; drag.textContent = '☰';
+        leftDiv.appendChild(drag);
+
+        const meta = document.createElement('div'); meta.className = 'item-meta';
+
+        // level display (hidden) and computed/status (created here, appended beside buttons)
+        const levelSpan = document.createElement('div'); levelSpan.className = 'meta-field hidden';
+        levelSpan.innerHTML = `<strong class="hidden">레벨:</strong> <span class="level-val hidden">${Math.min(7, depth+1)}</span>`;
+        meta.appendChild(levelSpan);
+
+        const computedDiv = document.createElement('div'); computedDiv.className = 'meta-field computed-inline';
+        const compLabel = document.createElement('span'); compLabel.innerHTML = `완료율: <span class=\"computed computed-val\">0</span>%`;
+        const statusSpan = document.createElement('span'); statusSpan.className = 'status status-val'; statusSpan.textContent = '-';
+        computedDiv.appendChild(compLabel);
+        computedDiv.appendChild(statusSpan);
+        // tooltip showing actual vs planned on hover
+        const tooltip = document.createElement('div'); tooltip.className = 'tooltip';
+        tooltip.textContent = `실적 완료율: ${it.actual_pct || 0}%\n계획 완료율: ${it.planned_pct || 0}%`;
+        computedDiv.appendChild(tooltip);
+        // will append computedDiv next to action buttons so it appears left of the add-child button
+
+        // name
+        const nameInput = createInput('name-input', it.name || '', 'text');
+        nameInput.placeholder = '프로세스 명'; nameInput.style.width = '220px';
+        meta.appendChild(nameInput);
+
+        // terminal checkbox
+        const termLabel = document.createElement('label'); termLabel.style.display='none'; termLabel.style.alignItems='center';
+        termLabel.className = 'meta-field hidden';
+        const termChk = createInput('term-checkbox', '', 'checkbox');
+        termChk.checked = !!it.isTerminal;
+        termLabel.appendChild(termChk);
+        termLabel.appendChild(document.createTextNode(' 단말여부'));
+        meta.appendChild(termLabel);
+
+        // weight
+        const weightInput = createInput('weight-input', it.weight || 0, 'number');
+        weightInput.min = '0'; weightInput.className += ' meta-field hidden'; weightInput.title='가중치';
+        meta.appendChild(weightInput);
+
+        // planned dates (boxed)
+        const plannedStart = createInput('planned-start', it.planned_start || '', 'date');
+        const plannedEnd = createInput('planned-end', it.planned_end || '', 'date');
+        const plannedPct = createInput('planned-pct', it.planned_pct || 0, 'number'); plannedPct.min = 0; plannedPct.max = 100;
+        plannedPct.className += ' meta-field hidden';
+        plannedPct.title = '계획 완료율(%)';
+        const plannedBox = document.createElement('div'); plannedBox.className='date-box planned-box';
+        const plannedLabel = document.createElement('div'); plannedLabel.className='label'; plannedLabel.textContent='계획';
+        plannedBox.appendChild(plannedLabel); plannedBox.appendChild(plannedStart);
+        const sep1 = document.createElement('div'); sep1.className='sep'; sep1.textContent='~'; plannedBox.appendChild(sep1);
+        plannedBox.appendChild(plannedEnd);
+        meta.appendChild(plannedBox);
+        meta.appendChild(plannedPct);
+
+        // actual dates are not shown but kept as hidden fields to preserve data structure
+        const actualStart = createInput('actual-start', it.actual_start || '', 'date'); actualStart.className += ' meta-field hidden';
+        const actualEnd = createInput('actual-end', it.actual_end || '', 'date'); actualEnd.className += ' meta-field hidden';
+        meta.appendChild(actualStart); meta.appendChild(actualEnd);
+
+        // actual: terminal nodes get an editable input; non-terminals show computed text.
+        const actualPctHidden = createInput('actual-pct', it.actual_pct || 0, 'number'); actualPctHidden.min=0; actualPctHidden.max=100;
+        actualPctHidden.className += ' meta-field hidden';
+        actualPctHidden.title = '실적 완료율(%)';
+
+        const actualBox = document.createElement('div'); actualBox.className='date-box actual-box';
+        const actualLabel = document.createElement('div'); actualLabel.className='label'; actualLabel.textContent='실적(%)';
+        actualBox.appendChild(actualLabel);
+
+        if (it.isTerminal) {
+            // show editable input for terminal nodes
+            actualPctHidden.className = actualPctHidden.className.replace(' hidden','');
+            actualPctHidden.style.width='64px';
+            actualBox.appendChild(actualPctHidden);
+            // ensure change triggers recompute (also wired in bulk below)
+            actualPctHidden.addEventListener('change', () => { computeAll(containerDOM); });
+        } else {
+            // non-terminal: show computed text
+            const actualDisplay = document.createElement('div'); actualDisplay.className='meta-field actual-display';
+            actualDisplay.textContent = String(it.actual_pct || 0);
+            actualBox.appendChild(actualDisplay);
+        }
+
+        meta.appendChild(actualBox);
+        // actualStart/actualEnd remain hidden and available in li._fields; actualPctHidden stores actual percent for all nodes (updated for parents too)
+        // change events wired below will handle recompute
+        
+
+
+
+        // computed container already created above
+
+        leftDiv.appendChild(meta);
+
+        const rightDiv = document.createElement('div'); rightDiv.className='item-actions';
+        // insert computed completion display left of buttons
+        rightDiv.appendChild(computedDiv);
+        const btnAddChild = document.createElement('button'); btnAddChild.className='btn-small'; btnAddChild.textContent='+';
+        const btnDelete = document.createElement('button'); btnDelete.className='btn-delete'; btnDelete.textContent='-';
+        rightDiv.appendChild(btnAddChild); rightDiv.appendChild(btnDelete);
+
+        row.appendChild(leftDiv); row.appendChild(rightDiv);
+        li.appendChild(row);
+
+        // attach values as data attributes for serialization convenience
+        li._fields = { nameInput, termChk, weightInput, plannedStart, plannedEnd, plannedPct, actualStart, actualEnd, actualPct: actualPctHidden, computedDiv };
+        // attach actualDisplay if present
+        const maybeDisplay = actualBox.querySelector('.actual-display'); if (maybeDisplay) li._fields.actualDisplay = maybeDisplay;
+
+        // wire events
+        [nameInput, weightInput, plannedStart, plannedEnd, plannedPct, li._fields.actualPct, termChk].forEach(el => {
+            if (el && el.addEventListener) el.addEventListener('change', () => { computeAll(containerDOM); });
+        });
+
+        btnAddChild.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const childId = 'n' + Date.now();
+            const childObj = { id: childId, name: '새 항목', isTerminal: true, weight: 0, planned_start: '', planned_end: '', planned_pct: 0, actual_start: '', actual_end: '', actual_pct: 0, children: [] };
+            const childUl = li.querySelector(':scope > ul');
+            const newLi = buildList([childObj], depth+1).querySelector('li');
+            if (childUl) childUl.appendChild(newLi); else {
+                const newUl = document.createElement('ul'); newUl.className='tree-list'; newUl.appendChild(newLi); li.appendChild(newUl);
+            }
+            enableSortables(containerDOM);
+            fixDepths(containerDOM);
+            computeAll(containerDOM);
+            try {
+                applyColumnVisibility(currentColumns);
+            } catch (e) { console.error('apply columns after add child failed', e); }
+        });
+
+        btnDelete.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm('삭제하시겠습니까?')) { li.remove(); computeAll(containerDOM);
+                try {
+                    applyColumnVisibility(currentColumns);
+                } catch (err) { console.error('apply columns after delete failed', err); }
+            }
+        });
+
+        // placeholder for children
+        if (it.children && it.children.length) {
+            li.appendChild(buildList(it.children, depth + 1));
+        } else {
+            const placeholder = document.createElement('ul'); placeholder.className = 'tree-list'; li.appendChild(placeholder);
+        }
+
+        ul.appendChild(li);
+    });
+    return ul;
+}
+
+function enableSortables(container) {
+    // initialize Sortable on all lists under container
+    container.querySelectorAll('ul.tree-list').forEach(ul => {
+        if (ul._sortable) return; // avoid double-init
+        ul._sortable = Sortable.create(ul, {
+            group: 'wbs',
+            animation: 150,
+            handle: '.drag-handle',
+            fallbackOnBody: true,
+            swapThreshold: 0.65,
+            onAdd: function () { fixDepths(container); computeAll(container); },
+            onUpdate: function () { fixDepths(container); computeAll(container); },
+        });
+    });
+}
+
+function fixDepths(container) {
+    function walk(ul, depth) {
+        ul.querySelectorAll(':scope > li').forEach(li => {
+            li.dataset.depth = String(depth);
+            const lvl = li.querySelector('.level-val');
+            if (lvl) lvl.textContent = String(Math.min(7, depth+1));
+            const childUl = li.querySelector(':scope > ul');
+            if (childUl) walk(childUl, depth + 1);
+        });
+    }
+    const root = container.querySelector('ul.tree-list');
+    if (root) walk(root, 0);
+}
+
+function serializeList(ul) {
+    const out = [];
+    ul.querySelectorAll(':scope > li').forEach(li => {
+        const f = li._fields;
+        const obj = {
+            id: li.dataset.id,
+            name: f.nameInput.value || '',
+            isTerminal: !!f.termChk.checked,
+            weight: Number(f.weightInput.value) || 0,
+            planned_start: f.plannedStart.value || '',
+            planned_end: f.plannedEnd.value || '',
+            planned_pct: Number(f.plannedPct.value) || 0,
+            actual_start: f.actualStart.value || '',
+            actual_end: f.actualEnd.value || '',
+            actual_pct: Number(f.actualPct.value) || 0,
+            children: []
+        };
+        const childUl = li.querySelector(':scope > ul');
+        if (childUl) obj.children = serializeList(childUl);
+        out.push(obj);
+    });
+    return out;
+}
+
+// helper: compute % based on start/end dates
+function computePctFromDates(startStr, endStr) {
+    try {
+        if (!startStr || !endStr) return 0;
+        const start = new Date(startStr + 'T00:00:00');
+        const end = new Date(endStr + 'T23:59:59');
+        const today = new Date();
+        if (today <= start) return 0;
+        if (today >= end) return 100;
+        const total = end.getTime() - start.getTime();
+        const elapsed = today.getTime() - start.getTime();
+        return Math.round(100 * (elapsed / total));
+    } catch (e) { return 0; }
+}
+
+function computeAll(container) {
+    const rootUl = container.querySelector('ul.tree-list');
+    if (!rootUl) return;
+
+    function computeLi(li) {
+        const childUl = li.querySelector(':scope > ul');
+        const f = li._fields;
+        let computedVal = 0;
+
+        // collect date ranges and compute
+        if (childUl) {
+            const children = Array.from(childUl.querySelectorAll(':scope > li'));
+            if (children.length) {
+                let sumW = 0, weighted = 0;
+                let minPlanned = null, maxPlanned = null;
+                children.forEach(c => {
+                    const cf = c._fields;
+                    // use child's actual percent (실적 완료율) for parent aggregation
+                    const childComputed = Number(cf.actualPct.value) || Number(c.dataset.computed) || 0;
+                    const w = Number(cf.weightInput.value) || 0;
+                    sumW += w; weighted += (w * childComputed);
+
+                    const ps = cf.plannedStart.value || '';
+                    const pe = cf.plannedEnd.value || '';
+                    if (ps) {
+                        if (!minPlanned || ps < minPlanned) minPlanned = ps;
+                        if (!maxPlanned || pe > maxPlanned) maxPlanned = pe;
+                    }
+                });
+                if (sumW > 0) computedVal = Math.round(weighted / sumW);
+                // set parent planned date ranges based on children
+                if (minPlanned) f.plannedStart.value = minPlanned;
+                if (maxPlanned) f.plannedEnd.value = maxPlanned;
+            } else {
+                // no children: use actual pct input value
+                computedVal = Number(f.actualPct.value) || 0;
+            }
+        } else {
+            // leaf node: use actual pct input value
+            computedVal = Number(f.actualPct.value) || 0;
+        }
+
+        // date-based pct for planned only - always update planned hidden field
+        const plannedPctDate = computePctFromDates(f.plannedStart.value, f.plannedEnd.value);
+        f.plannedPct.value = String(plannedPctDate);
+
+        // compute achievement ratio = (실적 완료율 / 계획 완료율)
+        const compSpan = f.computedDiv.querySelector('.computed-val');
+        const plannedPctNum = Number(f.plannedPct.value) || 0;
+
+        // nodeActualPct: computedVal already represents the node's actual percent (leaf uses actualPct input)
+        const nodeActualPct = Number(computedVal) || Number(f.actualPct.value) || 0;
+
+        let achievementRatio = 0;
+        if (plannedPctNum > 0) achievementRatio = nodeActualPct / plannedPctNum; // ratio (e.g., 0.75)
+        const achievementPercent = Math.round(achievementRatio * 100);
+        if (compSpan) compSpan.textContent = String(achievementPercent);
+
+        // status determination per provided Excel-like logic
+        const achieveEl = f.computedDiv.querySelector('.status-val');
+        let status = '-';
+        if (achievementRatio === 0) {
+            status = '-';
+        } else {
+            const today = new Date();
+            const pEnd = f.plannedEnd.value ? new Date(f.plannedEnd.value + 'T23:59:59') : null;
+            // IF(AND(Q6 <= $O$5, AB6 <1), "지연"
+            if (pEnd && (pEnd <= today) && achievementRatio < 1) {
+                status = '지연';
+            } else if (achievementRatio < 0.95) {
+                status = '지연';
+            } else if (nodeActualPct >= 100 || achievementRatio >= 1) {
+                status = '완료';
+            } else {
+                status = '진행중';
+            }
+        }
+        if (achieveEl) achieveEl.textContent = status;
+
+        // write computed actual back to hidden input so serialize includes it
+        f.actualPct.value = String(nodeActualPct);
+        // update visible actual display for non-terminals
+        if (f.actualDisplay) f.actualDisplay.textContent = String(nodeActualPct);
+
+        // update tooltip content to show actual and planned values
+        const tooltipEl = f.computedDiv.querySelector('.tooltip');
+        if (tooltipEl) {
+            const actualVal = Number(f.actualPct.value) || Number(li.dataset.computed) || 0;
+            const plannedVal = Number(f.plannedPct.value) || plannedPctDate || 0;
+            tooltipEl.textContent = `실적 완료율: ${actualVal}%\n계획 완료율: ${plannedVal}%`;
+        }
+
+        // store computed in a data attr for parent's calculation (store actual percent)
+        li.dataset.computed = String(nodeActualPct);
+    }
+
+    function walk(ul) {
+        ul.querySelectorAll(':scope > li').forEach(li => {
+            const childUl = li.querySelector(':scope > ul');
+            if (childUl) walk(childUl);
+            computeLi(li);
+        });
+    }
+
+    walk(rootUl);
+}
+
+async function renderWBS() {
+    const container = document.getElementById('tree-container');
+    container.innerHTML = '';
+    try {
+        const data = await fetchWBS(currentProjectId);
+        const root = buildList(data, 0);
+        container.appendChild(root);
+        window.containerDOM = container; // expose for inner functions
+        enableSortables(container);
+        fixDepths(container);
+        computeAll(container);
+        // remember last loaded tree
+        window.lastWBS = data;
+        // apply project-specific column visibility if any
+        try {
+            const cols = currentProjectId ? await fetchProjectColumns(currentProjectId) : null;
+            if (cols) { currentColumns = cols; applyColumnVisibility(cols); }
+        } catch (e) { console.error('applying project columns failed', e); }
+    } catch (err) {
+        container.innerHTML = '<div style="color:#b91c1c">데이터를 불러오지 못했습니다.</div><pre style="color:#475569;margin-top:8px;white-space:pre-wrap;">'+ (err && err.message ? err.message : String(err)) +'</pre>';
+        console.error('renderWBS error:', err);
+    }
+}
+
+
+// Column management (server-side per-project)
+const SERVER_PROJECT_ID = {{ project.id if project else 'null' }};
+const SERVER_PROJECT_NAME = {{ project.name|tojson if project else 'null' }};
+const PROJECTS = {{ projects|tojson }};
+const COLUMNS = [
+    { key: 'level', label: '레벨', selector: '.level-val, .item-row .label' },
+    { key: 'weight', label: '가중치', selector: '.weight-input' },
+    { key: 'planned_start', label: '계획 시작일', selector: '.planned-start' },
+    { key: 'planned_end', label: '계획 종료일', selector: '.planned-end' },
+    { key: 'planned_pct', label: '계획 완료율', selector: '.planned-pct' },
+    { key: 'actual_start', label: '실적 시작일', selector: '.actual-start' },
+    { key: 'actual_end', label: '실적 종료일', selector: '.actual-end' },
+    { key: 'actual_pct', label: '실적 완료율', selector: '.actual-box' },
+    { key: 'actions', label: '작업', selector: '.item-actions' }
+];
+
+let currentColumns = {}; // current column visibility for selected project
+let currentProjectId = null;
+
+function renderProjectSelector() {
+    const sel = document.getElementById('project-select');
+    const nameSpan = document.getElementById('project-name');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">(베이스라인)</option>' + PROJECTS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    // per preference: hide project selector on WBS page (projects page will link to project-specific WBS)
+    sel.style.display = 'none';
+    if (SERVER_PROJECT_ID) {
+        // project-specific page: show project name and set current project id
+        if (nameSpan) { nameSpan.textContent = SERVER_PROJECT_NAME; nameSpan.style.display = 'inline-block'; }
+        currentProjectId = Number(SERVER_PROJECT_ID);
+        return;
+    } else {
+        // baseline page: hide project name as well
+        if (nameSpan) { nameSpan.style.display = 'none'; }
+    }
+    // Note: selector is hidden by default, so no change event handler is needed here.
+}
+
+async function fetchProjectColumns(projId) {
+    if (!projId) return null;
+    const res = await fetch('/api/project/' + projId + '/wbs/columns');
+    if (!res.ok) return null;
+    return res.json();
+}
+
+async function saveProjectColumns(projId, cols) {
+    if (!projId) return {ok:false, error:'no project selected'};
+    const res = await fetch('/api/project/' + projId + '/wbs/columns/update', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({columns: cols})
+    });
+    return res.json();
+}
+
+function renderColumnsPanel(cols) {
+    const list = document.getElementById('columns-list'); if (!list) return;
+    list.innerHTML = '';
+    COLUMNS.forEach(c => {
+        const div = document.createElement('div'); div.className = 'manage-item';
+        const chk = document.createElement('input'); chk.type = 'checkbox'; chk.dataset.key = c.key; chk.checked = !!cols[c.key];
+        const label = document.createElement('div'); label.className='name'; label.textContent = c.label;
+        chk.addEventListener('change', (e)=>{ currentColumns[c.key] = !!e.target.checked; applyColumnVisibility(currentColumns); });
+        div.appendChild(chk); div.appendChild(label); list.appendChild(div);
+    });
+}
+
+function applyColumnVisibility(cols) {
+    // iterate columns and toggle the 'hidden' class on matching elements
+    COLUMNS.forEach(c => {
+        const show = !!cols[c.key];
+        document.querySelectorAll(c.selector).forEach(el => {
+            if (show) el.classList.remove('hidden'); else el.classList.add('hidden');
+        });
+    });
+}
+
+// toggle columns panel
+const btnColumns = document.getElementById('btn-manage-columns');
+if (btnColumns) btnColumns.addEventListener('click', async () => {
+    const panel = document.getElementById('columns-panel');
+    if (!panel) return;
+    panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+    // if opening, render current project columns
+    if (panel.style.display === 'block') {
+        const pid = currentProjectId;
+        let cols = pid ? await fetchProjectColumns(pid) : null;
+        if (!cols) {
+            // default visibility - client-side fallback
+            cols = {};
+            COLUMNS.forEach(c=>cols[c.key] = (c.key === 'planned_start' || c.key === 'planned_end' || c.key === 'planned_pct' || c.key === 'actual_pct' || c.key === 'actions'));
+        }
+        currentColumns = cols;
+        renderColumnsPanel(cols);
+    }
+});
+
+// columns panel refresh/save
+const btnColsRefresh = document.getElementById('columns-refresh');
+if (btnColsRefresh) btnColsRefresh.addEventListener('click', async ()=>{
+    const pid = currentProjectId; let cols = pid ? await fetchProjectColumns(pid) : null;
+    if (!cols) cols = {};
+    currentColumns = cols; renderColumnsPanel(cols); applyColumnVisibility(cols);
+});
+const btnColsSave = document.getElementById('columns-save');
+if (btnColsSave) btnColsSave.addEventListener('click', async ()=>{
+    if (!currentProjectId) { alert('프로젝트를 선택 후 저장하세요.'); return; }
+    const r = await saveProjectColumns(currentProjectId, currentColumns);
+    if (r && r.ok) { alert('저장되었습니다.'); } else { alert('저장 실패'); }
+});
+
+// events
+
+document.getElementById('btn-refresh').addEventListener('click', renderWBS);
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+
+    const status = document.getElementById('save-status');
+    status.textContent = '저장중...';
+    try {
+        const rootUl = document.querySelector('#tree-container > ul.tree-list');
+        const payload = serializeList(rootUl || document.createElement('ul'));
+        let url = '/api/wbs/update';
+        if (currentProjectId) url = '/api/project/' + currentProjectId + '/wbs/update';
+        const res = await fetch(url, {
+            method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+        });
+        const j = await res.json();
+        if (res.ok && j.ok) {
+            status.textContent = '저장되었습니다.';
+        } else {
+            status.textContent = '저장 실패';
+        }
+    } catch (err) {
+        status.textContent = '오류';
+        console.error(err);
+    }
+    setTimeout(()=>{ document.getElementById('save-status').textContent=''; }, 2500);
+});
+
+// add new root-level WBS item
+
+document.getElementById('btn-add-item').addEventListener('click', async () => {
+    const container = document.getElementById('tree-container');
+    const rootUl = container.querySelector('ul.tree-list');
+    const id = 'n' + Date.now();
+    const obj = {id, name: '새 항목', isTerminal: true, weight: 0, planned_start: '', planned_end: '', planned_pct:0, actual_start:'', actual_end:'', actual_pct:0, children: []};
+    const li = buildList([obj], 0).querySelector('li');
+    (rootUl || document.createElement('ul')).appendChild(li);
+    enableSortables(container);
+    fixDepths(container);
+    computeAll(container);
+    try {
+        applyColumnVisibility(currentColumns);
+    } catch (e) { console.error('apply columns after add root failed', e); }
+});
+
+// initial render
+renderProjectSelector();
+renderWBS();
+</script>
+
+{% endblock %}
