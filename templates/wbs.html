@@ -145,7 +145,7 @@ function buildList(items, depth = 0) {
         weightInput.min = '0'; weightInput.className += ' meta-field hidden'; weightInput.title='가중치';
         meta.appendChild(weightInput);
 
-        // planned dates (boxed)
+        // planned dates (boxed) + percent
         const plannedStart = createInput('planned-start', it.planned_start || '', 'date');
         const plannedEnd = createInput('planned-end', it.planned_end || '', 'date');
         const plannedPct = createInput('planned-pct', it.planned_pct || 0, 'number'); plannedPct.min = 0; plannedPct.max = 100;
@@ -156,8 +156,24 @@ function buildList(items, depth = 0) {
         plannedBox.appendChild(plannedLabel); plannedBox.appendChild(plannedStart);
         const sep1 = document.createElement('div'); sep1.className='sep'; sep1.textContent='~'; plannedBox.appendChild(sep1);
         plannedBox.appendChild(plannedEnd);
+        if (it.isTerminal) {
+            // show editable input for terminal nodes
+            plannedPct.className = plannedPct.className.replace(' hidden','');
+            plannedPct.style.width='64px';
+            plannedBox.appendChild(plannedPct);
+            // ensure change triggers recompute (also wired in bulk below)
+            plannedPct.addEventListener('change', () => { computeAll(containerDOM); });
+        } else {
+            // non-terminal: show computed text
+            const plannedDisplay = document.createElement('div'); plannedDisplay.className='meta-field planned-display';
+            plannedDisplay.textContent = String(it.planned_pct || 0);
+            plannedBox.appendChild(plannedDisplay);
+        }
+
+        //계획 실적율 추가
+        //plannedBox.appendChild(plannedPct);
         meta.appendChild(plannedBox);
-        meta.appendChild(plannedPct);
+        //meta.appendChild(plannedPct);
 
         // actual dates are not shown but kept as hidden fields to preserve data structure
         const actualStart = createInput('actual-start', it.actual_start || '', 'date'); actualStart.className += ' meta-field hidden';
@@ -210,8 +226,9 @@ function buildList(items, depth = 0) {
 
         // attach values as data attributes for serialization convenience
         li._fields = { nameInput, termChk, weightInput, plannedStart, plannedEnd, plannedPct, actualStart, actualEnd, actualPct: actualPctHidden, computedDiv };
-        // attach actualDisplay if present
+        // attach actualDisplay, planned if present
         const maybeDisplay = actualBox.querySelector('.actual-display'); if (maybeDisplay) li._fields.actualDisplay = maybeDisplay;
+        const maybePlannedDisplay = plannedBox.querySelector('.planned-display'); if (maybePlannedDisplay) li._fields.plannedDisplay = maybePlannedDisplay;
 
         // wire events
         [nameInput, weightInput, plannedStart, plannedEnd, plannedPct, li._fields.actualPct, termChk].forEach(el => {
