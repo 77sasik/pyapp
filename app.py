@@ -260,7 +260,7 @@ def wbs():
 
 @app.route('/api/project/<int:proj_id>/wbs/columns')
 def api_project_wbs_columns(proj_id):
-    """프로젝트별 WBS 열 표시 설정 조회 (없으면 기본값 복사)"""
+    """프로젝트별 WBS 열 표시 설정 조회 (없으면 기본값 복사), 추후 개별 관리하는 방식으로 데이터베이스 적용 필요"""
     if proj_id not in PROJECT_WBS_COLUMNS:
         import copy
         PROJECT_WBS_COLUMNS[proj_id] = copy.deepcopy(DEFAULT_WBS_COLUMNS)
@@ -268,7 +268,7 @@ def api_project_wbs_columns(proj_id):
 
 @app.route('/api/project/<int:proj_id>/wbs/columns/update', methods=['POST'])
 def api_project_wbs_columns_update(proj_id):
-    """프로젝트별 WBS 열 표시 설정 업데이트"""
+    """프로젝트별 WBS 열 표시 설정 업데이트, 추후 개별 관리하는 방식으로 데이터베이스 적용 필요"""
     try:
         data = request.get_json()
     except Exception:

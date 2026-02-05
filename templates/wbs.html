@@ -578,7 +578,7 @@ if (btnColsRefresh) btnColsRefresh.addEventListener('click', async ()=>{
 });
 const btnColsSave = document.getElementById('columns-save');
 if (btnColsSave) btnColsSave.addEventListener('click', async ()=>{
-    if (!currentProjectId) { alert('프로젝트를 선택 후 저장하세요.'); return; }
+    //if (!currentProjectId) { alert('프로젝트를 선택 후 저장하세요.'); return; }
     const r = await saveProjectColumns(currentProjectId, currentColumns);
     if (r && r.ok) { alert('저장되었습니다.'); } else { alert('저장 실패'); }
 });
